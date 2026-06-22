@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: worker, namespace: studio }
+spec:
+  replicas: 4
+  selector: { matchLabels: { app: worker } }
+  template:
+    metadata: { labels: { app: worker } }
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/studio/api:latest
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "worker", "-Q", "research,writing,publishing,analytics,heavy,default", "-c", "8", "-l", "info"]
+          envFrom:
+            - configMapRef: { name: studio-config }
+            - secretRef:    { name: studio-secrets }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits:   { cpu: 2, memory: 4Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: worker-video, namespace: studio }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: worker-video } }
+  template:
+    metadata: { labels: { app: worker-video } }
+    spec:
+      containers:
+        - name: worker-video
+          image: ghcr.io/studio/worker-video:latest
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "worker", "-Q", "video", "-c", "2", "-l", "info"]
+          envFrom:
+            - configMapRef: { name: studio-config }
+            - secretRef:    { name: studio-secrets }
+          resources:
+            requests: { cpu: 1, memory: 2Gi }
+            limits:   { cpu: 4, memory: 8Gi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: beat, namespace: studio }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: beat } }
+  template:
+    metadata: { labels: { app: beat } }
+    spec:
+      containers:
+        - name: beat
+          image: ghcr.io/studio/api:latest
+          command: ["celery"]
+          args: ["-A", "app.workers.celery_app", "beat", "-l", "info"]
+          envFrom:
+            - configMapRef: { name: studio-config }
+            - secretRef:    { name: studio-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: worker, namespace: studio }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: worker }
+  minReplicas: 4
+  maxReplicas: 50
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }

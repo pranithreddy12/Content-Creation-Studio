@@ -1,0 +1,89 @@
+groups:
+  - name: api.health
+    rules:
+      - alert: APIDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels: { severity: critical, service: api }
+        annotations:
+          summary: "API instance {{ $labels.instance }} is down"
+          runbook: "Restart deployment, check recent rollouts, /metrics"
+
+      - alert: APIHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="api",status=~"5.."}[5m]))
+            / sum(rate(http_requests_total{job="api"}[5m])) > 0.02
+        for: 10m
+        labels: { severity: critical, service: api }
+        annotations:
+          summary: "API 5xx error rate above 2% over 10m"
+
+      - alert: APIHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="api"}[5m]))
+              by (le, path)) > 1.5
+        for: 10m
+        labels: { severity: warning, service: api }
+        annotations:
+          summary: "API p95 latency > 1.5s for {{ $labels.path }}"
+
+  - name: workers
+    rules:
+      - alert: CeleryQueueBackedUp
+        expr: redis_list_length{key=~"celery.*"} > 5000
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Celery queue {{ $labels.key }} > 5k tasks"
+
+      - alert: CeleryWorkerSilent
+        expr: time() - max(celery_last_seen_seconds) by (worker) > 300
+        for: 5m
+        labels: { severity: critical, service: worker }
+        annotations:
+          summary: "Worker {{ $labels.worker }} has not heartbeat for 5m"
+
+  - name: db
+    rules:
+      - alert: PostgresHighConnections
+        expr: |
+          pg_stat_database_numbackends / pg_settings_max_connections > 0.85
+        for: 10m
+        labels: { severity: warning, service: postgres }
+        annotations:
+          summary: "Postgres at {{ $value | humanizePercentage }} of max_connections"
+
+      - alert: PostgresReplicationLag
+        expr: pg_replication_lag_seconds > 60
+        for: 5m
+        labels: { severity: warning, service: postgres }
+        annotations:
+          summary: "Replica {{ $labels.instance }} lagging {{ $value }}s"
+
+  - name: cost
+    rules:
+      - alert: LLMSpendSpike
+        expr: increase(llm_cost_usd_total[1h]) > 50
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM spend > $50 in last hour ({{ $value }})"
+
+  - name: business
+    rules:
+      - alert: DailyLoopNotFiring
+        expr: increase(daily_loop_kickoffs_total[24h]) == 0
+        for: 24h
+        labels: { severity: critical }
+        annotations:
+          summary: "No daily loops kicked off in the last 24h"
+
+      - alert: PublishFailureSpike
+        expr: |
+          sum(rate(publish_attempts_total{outcome="failed"}[15m]))
+            / sum(rate(publish_attempts_total[15m])) > 0.10
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: "Publish failure rate > 10% over 15m"

@@ -1,0 +1,35 @@
+{
+  "title": "Studio · System",
+  "uid": "studio-system",
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "tags": ["studio", "system"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "timeseries", "title": "Request rate (RPS)", "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(http_requests_total{job=\"api\"}[1m])) by (path)" }]
+    },
+    {
+      "type": "timeseries", "title": "p95 latency (s)", "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"api\"}[5m])) by (le, path))" }]
+    },
+    {
+      "type": "stat", "title": "5xx rate", "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(rate(http_requests_total{job=\"api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"api\"}[5m]))" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 0.005 }, { "color": "red", "value": 0.02 }
+      ]}}}
+    },
+    {
+      "type": "timeseries", "title": "Postgres connections", "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+      "targets": [{ "expr": "pg_stat_database_numbackends" }]
+    },
+    {
+      "type": "timeseries", "title": "Redis ops/sec", "gridPos": { "x": 12, "y": 8, "w": 12, "h": 4 },
+      "targets": [{ "expr": "rate(redis_commands_processed_total[1m])" }]
+    }
+  ]
+}

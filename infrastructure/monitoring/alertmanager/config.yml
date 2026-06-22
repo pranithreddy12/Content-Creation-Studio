@@ -1,0 +1,41 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: ${SLACK_WEBHOOK_URL}
+
+route:
+  receiver: slack-default
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: pagerduty
+      continue: true
+    - matchers: [severity="warning"]
+      receiver: slack-warnings
+
+receivers:
+  - name: slack-default
+    slack_configs:
+      - channel: "#studio-alerts"
+        send_resolved: true
+        title: '{{ .CommonLabels.alertname }} ({{ .Status }})'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Labels.severity | toUpper }}* {{ .Annotations.summary }}
+          {{ .Annotations.runbook }}
+          {{ end }}
+  - name: slack-warnings
+    slack_configs:
+      - channel: "#studio-warnings"
+        send_resolved: true
+  - name: pagerduty
+    pagerduty_configs:
+      - service_key: ${PAGERDUTY_KEY}
+        severity: '{{ if eq .CommonLabels.severity "critical" }}critical{{ else }}warning{{ end }}'
+
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [service]

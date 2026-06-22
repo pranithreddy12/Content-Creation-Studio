@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: studio
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/studio/api
+    newTag: staging
+  - name: ghcr.io/studio/frontend
+    newTag: staging
+  - name: ghcr.io/studio/worker-video
+    newTag: staging
+patches:
+  - path: replicas-patch.yaml
+    target: { kind: Deployment, name: api }
+  - path: replicas-patch.yaml
+    target: { kind: Deployment, name: frontend }

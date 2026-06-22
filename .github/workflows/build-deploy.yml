@@ -1,0 +1,87 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_API: ghcr.io/${{ github.repository_owner }}/studio-api
+  IMAGE_VIDEO: ghcr.io/${{ github.repository_owner }}/studio-worker-video
+  IMAGE_FRONT: ghcr.io/${{ github.repository_owner }}/studio-frontend
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - { name: api,          context: backend,  dockerfile: backend/Dockerfile,       image: IMAGE_API }
+          - { name: worker-video, context: backend,  dockerfile: backend/Dockerfile.video, image: IMAGE_VIDEO }
+          - { name: frontend,     context: frontend, dockerfile: frontend/Dockerfile,      image: IMAGE_FRONT }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env[matrix.target.image] }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.target.context }}
+          file: ${{ matrix.target.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: images
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - run: aws eks update-kubeconfig --name studio-staging --region us-east-1
+      - run: kubectl apply -k infrastructure/kubernetes/overlays/staging
+      - run: kubectl rollout status deploy/api -n studio --timeout=300s
+      - run: kubectl rollout status deploy/frontend -n studio --timeout=300s
+
+  deploy-prod:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: images
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - run: aws eks update-kubeconfig --name studio-prod --region us-east-1
+      - run: kubectl apply -k infrastructure/kubernetes/overlays/prod
+      - run: kubectl rollout status deploy/api -n studio --timeout=600s
+      - run: kubectl rollout status deploy/frontend -n studio --timeout=600s

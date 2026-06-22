@@ -1,0 +1,56 @@
+global:
+  image:
+    registry: ghcr.io/studio
+    tag: latest
+    pullPolicy: IfNotPresent
+  domain: studio.example.com
+  apiDomain: api.studio.example.com
+
+api:
+  replicaCount: 3
+  hpa: { enabled: true, min: 3, max: 30, targetCPU: 65 }
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits:   { cpu: 1500m, memory: 2Gi }
+
+worker:
+  replicaCount: 4
+  hpa: { enabled: true, min: 4, max: 50, targetCPU: 70 }
+
+videoWorker:
+  replicaCount: 2
+  resources:
+    requests: { cpu: 1, memory: 2Gi }
+    limits:   { cpu: 4, memory: 8Gi }
+
+beat:
+  replicaCount: 1
+
+frontend:
+  replicaCount: 3
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1, memory: 1Gi }
+
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    enabled: true
+    secretName: studio-tls
+
+postgres:
+  external: true   # set false to deploy bitnami chart; in prod we point at RDS
+
+redis:
+  external: true
+
+qdrant:
+  external: false
+  replicaCount: 3
+
+s3:
+  endpoint: ""   # AWS by default
+
+observability:
+  serviceMonitor: { enabled: true }

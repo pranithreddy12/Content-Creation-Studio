@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata: { name: api, namespace: studio, labels: { release: kube-prometheus-stack } }
+spec:
+  selector: { matchLabels: { app: api } }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: studio-alerts, namespace: studio, labels: { release: kube-prometheus-stack } }
+spec:
+  groups:
+    - name: studio.api
+      rules:
+        - alert: APIDown
+          expr: up{job="studio-api"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations: { summary: "API instance {{ $labels.instance }} down" }

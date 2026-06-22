@@ -1,0 +1,33 @@
+{
+  "title": "Studio · Content Loop",
+  "uid": "studio-content-loop",
+  "schemaVersion": 38,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "panels": [
+    {
+      "type": "stat", "title": "Daily loops kicked off (24h)", "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(increase(daily_loop_kickoffs_total[24h]))" }]
+    },
+    {
+      "type": "stat", "title": "Ideas generated (24h)", "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(increase(ideas_generated_total[24h]))" }]
+    },
+    {
+      "type": "stat", "title": "Assets generated (24h)", "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(increase(assets_generated_total[24h]))" }]
+    },
+    {
+      "type": "stat", "title": "Publishes (24h)", "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(increase(publish_attempts_total{outcome=\"ok\"}[24h]))" }]
+    },
+    {
+      "type": "timeseries", "title": "Agent runs/min by name", "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(agent_runs_total[1m])) by (agent)" }]
+    },
+    {
+      "type": "timeseries", "title": "Publish outcome by platform", "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "sum(rate(publish_attempts_total[5m])) by (platform, outcome)" }]
+    }
+  ]
+}

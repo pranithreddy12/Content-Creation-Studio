@@ -1,0 +1,29 @@
+name: DB migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      env: { description: "staging or prod", required: true, default: "staging" }
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Pull DATABASE_URL from Secrets Manager
+        run: |
+          aws secretsmanager get-secret-value --secret-id studio/${{ inputs.env }}/db --query SecretString --output text >> "$GITHUB_ENV"
+      - run: alembic upgrade head
+        working-directory: backend

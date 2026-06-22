@@ -1,0 +1,28 @@
+{
+  "title": "Studio · LLM Cost",
+  "uid": "studio-cost",
+  "schemaVersion": 38,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "panels": [
+    {
+      "type": "stat", "title": "LLM spend (24h, USD)", "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [{ "expr": "sum(increase(llm_cost_usd_total[24h]))" }]
+    },
+    {
+      "type": "stat", "title": "Tokens out (24h)", "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "sum(increase(llm_tokens_total{direction=\"out\"}[24h]))" }]
+    },
+    {
+      "type": "timeseries", "title": "Cost/min by provider", "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [{ "expr": "sum(rate(llm_cost_usd_total[1m])) by (provider)" }]
+    },
+    {
+      "type": "timeseries", "title": "Cost/min by agent", "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [{ "expr": "sum(rate(llm_cost_usd_total[1m])) by (agent)" }]
+    }
+  ]
+}

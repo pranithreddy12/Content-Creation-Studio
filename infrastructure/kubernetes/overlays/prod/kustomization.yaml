@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: studio
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/studio/api
+    newTag: prod
+  - name: ghcr.io/studio/frontend
+    newTag: prod
+  - name: ghcr.io/studio/worker-video
+    newTag: prod
