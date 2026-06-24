@@ -1,4 +1,4 @@
-from app.models.account import Account, AccountMember, Workspace
+from app.models.account import Account, AccountMember, DeletionJob, Workspace
 from app.models.agent import AgentPrompt, AgentRun
 from app.models.analytics import AssetMetric, PatternScore
 from app.models.audit import AuditLog, Webhook
@@ -14,7 +14,7 @@ from app.models.viral import ViralPattern, ViralPost
 from app.models.workflow import Workflow, WorkflowRun
 
 __all__ = [
-    "Account", "AccountMember", "Workspace", "User",
+    "Account", "AccountMember", "Workspace", "User", "DeletionJob",
     "Brand", "Source", "SourceChunk",
     "ResearchRun", "ResearchItem", "Opportunity",
     "ContentIdea", "ContentAsset", "MediaAsset", "VideoRender",

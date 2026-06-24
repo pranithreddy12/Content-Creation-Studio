@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, text
 
 ADMIN_URL = "postgresql://studio:studio@postgres:5432/postgres"
 ASYNC_TMPL = "postgresql+asyncpg://studio:studio@postgres:5432/{db}"
-HEAD = "0002_tier0_additions"
+HEAD = "0003_deletion_jobs"
 
 
 def _admin_exec(sql: str) -> None:
@@ -103,7 +103,7 @@ def test_0002_stepwise_up_down_up_on_preexisting_environment():
         # (c) upgrade to 0002 — must be a clean no-op
         c = _alembic(env, "upgrade", "0002_tier0_additions")
         assert c.returncode == 0, c.stderr
-        assert _version(url) == HEAD
+        assert _version(url) == "0002_tier0_additions"
         assert _table_exists(url, "processed_stripe_events")
         assert _column_exists(url, "schedules", "claimed_at")
 
@@ -125,7 +125,7 @@ def test_0002_stepwise_up_down_up_on_preexisting_environment():
         # (e) re-upgrade
         e = _alembic(env, "upgrade", "0002_tier0_additions")
         assert e.returncode == 0, e.stderr
-        assert _version(url) == HEAD
+        assert _version(url) == "0002_tier0_additions"
     finally:
         try:
             _admin_exec(f"DROP DATABASE IF EXISTS {db}")

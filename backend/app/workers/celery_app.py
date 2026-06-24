@@ -22,6 +22,7 @@ celery_app = Celery(
         "app.workers.tasks.ingest_tasks",
         "app.workers.tasks.workflow_tasks",
         "app.workers.tasks.health_tasks",
+        "app.workers.tasks.account_tasks",
     ],
 )
 
@@ -41,6 +42,7 @@ celery_app.conf.update(
         "app.workers.tasks.ingest_tasks.*":     {"queue": "heavy"},
         "app.workers.tasks.loop_tasks.*":       {"queue": "default"},
         "app.workers.tasks.workflow_tasks.*":   {"queue": "default"},
+        "app.workers.tasks.account_tasks.*":    {"queue": "heavy"},
     },
     task_acks_late=True,
     task_reject_on_worker_lost=True,

@@ -34,3 +34,18 @@ def presign(key: str, expires_in: int = 3600) -> str:
         Params={"Bucket": settings.s3_bucket, "Key": key},
         ExpiresIn=expires_in,
     )
+
+
+def delete_prefix(prefix: str) -> int:
+    """Delete every object under `prefix`; returns the count deleted. Idempotent
+    (an empty prefix deletes nothing). Used by the account purge."""
+    s = s3()
+    bucket = settings.s3_bucket
+    deleted = 0
+    paginator = s.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        objs = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+        if objs:
+            s.delete_objects(Bucket=bucket, Delete={"Objects": objs})
+            deleted += len(objs)
+    return deleted

@@ -32,9 +32,10 @@ EXPECTED_TABLES = {
     "plan_limits", "usage_events", "processed_stripe_events",
     "audit_log", "webhooks",
     "notifications", "push_tokens",
+    "deletion_jobs",
 }
 
-CURRENT_HEAD = "0002_tier0_additions"
+CURRENT_HEAD = "0003_deletion_jobs"
 
 
 def _admin_exec(sql: str) -> None:

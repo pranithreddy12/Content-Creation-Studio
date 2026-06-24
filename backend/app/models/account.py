@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -36,3 +37,23 @@ class AccountMember(Base):
     user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     role: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DeletionJob(Base, UUIDPKMixin, TimestampMixin):
+    """Resumable, per-store progress ledger for a hard account purge.
+
+    account_id is a PLAIN column, NOT a FK — the job must outlive the Account row
+    it deletes (otherwise the cascade would erase the job mid-purge). brand_ids is
+    captured at creation, while the account still exists, because the Qdrant
+    (per-brand collections) and MinIO (per-brand prefixes) purges need it AFTER
+    the Postgres rows are gone.
+    """
+    __tablename__ = "deletion_jobs"
+    account_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)  # pending|running|completed|failed
+    brand_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    qdrant_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    minio_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    redis_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    postgres_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

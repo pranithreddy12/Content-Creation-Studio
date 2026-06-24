@@ -7,6 +7,7 @@ default Workspace. Subsequent requests look it up.
 """
 from __future__ import annotations
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,10 @@ async def get_or_create_account(db: AsyncSession, user: CurrentUser) -> Account:
         select(Account).where(Account.clerk_org_id == org_id)
     )).scalar_one_or_none()
     if acct:
+        # A tombstoned account is mid-purge (hard delete pending) — reject every
+        # request immediately rather than serving stale data or re-provisioning.
+        if acct.deleted_at is not None:
+            raise HTTPException(status.HTTP_410_GONE, "account is being deleted")
         return acct
 
     acct = Account(
