@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Emit a self-contained server bundle (.next/standalone) the Docker runner copies.
+  output: "standalone",
   experimental: { ppr: false },
   images: {
     remotePatterns: [

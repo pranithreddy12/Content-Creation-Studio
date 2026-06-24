@@ -11,8 +11,8 @@ from app.agents.llm_router import llm_router
 from app.agents.registry import AGENTS, get_agent
 from app.agents.runner import run_agent
 from app.api.deps import CurrentUser, DBSession, current_user
-from app.models.account import Account
 from app.models.brand import Brand
+from app.services.billing import BudgetExceeded, check_rate
 from app.services.provisioning import get_or_create_account
 
 router = APIRouter()
@@ -42,12 +42,16 @@ async def invoke_agent(
     user: Annotated[CurrentUser, Depends(current_user)],
 ) -> dict:
     acct = await get_or_create_account(db, user)
+    await check_rate(acct.id, plan=acct.plan)
     brand = (await db.execute(
         select(Brand).where(Brand.id == payload.brand_id, Brand.account_id == acct.id)
     )).scalar_one_or_none()
     if not brand:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "brand not found")
-    agent = get_agent(payload.agent)
+    try:
+        agent = get_agent(payload.agent)
+    except KeyError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown agent: {payload.agent}")
     ctx = AgentContext(
         account_id=acct.id,
         brand_id=brand.id,
@@ -73,7 +77,8 @@ async def chat(
     db: DBSession,
     user: Annotated[CurrentUser, Depends(current_user)],
 ) -> dict:
-    await get_or_create_account(db, user)
+    acct = await get_or_create_account(db, user)
+    await check_rate(acct.id, plan=acct.plan)
     msgs = [m for m in payload.history if m.role in ("user", "assistant")]
     if not msgs:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty history")
@@ -88,8 +93,11 @@ async def chat(
             user=convo,
             max_tokens=1500,
             temperature=0.5,
+            account_id=acct.id,
         )
         return {"reply": resp.text, "model": resp.model, "provider": resp.provider}
+    except BudgetExceeded as exc:
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, str(exc))
     except Exception as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LLM call failed: {exc}")
 

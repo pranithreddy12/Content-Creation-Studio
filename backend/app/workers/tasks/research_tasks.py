@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
 from app.agents.research import ResearchAgent

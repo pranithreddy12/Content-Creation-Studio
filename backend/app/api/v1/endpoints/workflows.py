@@ -73,7 +73,10 @@ async def update_workflow(
     if not wf:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow not found")
     if payload.definition is not None:
-        validate_workflow(payload.definition)
+        try:
+            validate_workflow(payload.definition)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid workflow: {exc}")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(wf, k, v)
     await db.commit()
@@ -126,10 +129,42 @@ async def run_workflow_ep(
 async def list_runs(
     workflow_id: UUID,
     db: DBSession,
-    _: Annotated[CurrentUser, Depends(current_user)],
+    user: Annotated[CurrentUser, Depends(current_user)],
 ):
+    # Tenant isolation: only return runs whose parent workflow belongs to the caller's account.
+    acct = await _account(db, user)
+    wf = (await db.execute(
+        select(Workflow).where(Workflow.id == workflow_id, Workflow.account_id == acct.id)
+    )).scalar_one_or_none()
+    if not wf:
+        # 404 not 403 — same response shape as "doesn't exist", no existence side channel.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow not found")
     rows = (await db.execute(
         select(WorkflowRun).where(WorkflowRun.workflow_id == workflow_id)
         .order_by(WorkflowRun.started_at.desc()).limit(50)
     )).scalars().all()
     return list(rows)
+
+
+@router.get("/{workflow_id}/runs/{run_id}", response_model=WorkflowRunOut)
+async def get_run(
+    workflow_id: UUID,
+    run_id: UUID,
+    db: DBSession,
+    user: Annotated[CurrentUser, Depends(current_user)],
+):
+    # Two-step tenant scoping: workflow must belong to caller, run must belong to that workflow.
+    acct = await _account(db, user)
+    wf = (await db.execute(
+        select(Workflow).where(Workflow.id == workflow_id, Workflow.account_id == acct.id)
+    )).scalar_one_or_none()
+    if not wf:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow not found")
+    run = (await db.execute(
+        select(WorkflowRun).where(
+            WorkflowRun.id == run_id, WorkflowRun.workflow_id == workflow_id,
+        )
+    )).scalar_one_or_none()
+    if not run:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "workflow run not found")
+    return run

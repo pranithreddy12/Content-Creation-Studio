@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
 from app.agents.learning import LearningAgent

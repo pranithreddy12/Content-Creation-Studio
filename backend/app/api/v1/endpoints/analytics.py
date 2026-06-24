@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.api.deps import CurrentUser, DBSession, current_user
 from app.models.analytics import AssetMetric
 from app.models.brand import Brand
 from app.models.content import ContentAsset
-from app.models.publishing import Schedule
+from app.models.publishing import Schedule, ScheduleStatus
 from app.services.provisioning import get_or_create_account
 
 router = APIRouter()
@@ -44,12 +44,13 @@ async def overview(
     )).scalar() or 0
     scheduled = (await db.execute(
         select(func.count()).select_from(Schedule).where(
-            Schedule.brand_id.in_(brand_ids), Schedule.status.in_(("pending", "publishing"))
+            Schedule.brand_id.in_(brand_ids),
+            Schedule.status.in_((ScheduleStatus.PENDING, ScheduleStatus.PUBLISHING)),
         )
     )).scalar() or 0
     published = (await db.execute(
         select(func.count()).select_from(Schedule).where(
-            Schedule.brand_id.in_(brand_ids), Schedule.status == "published"
+            Schedule.brand_id.in_(brand_ids), Schedule.status == ScheduleStatus.PUBLISHED
         )
     )).scalar() or 0
     return {

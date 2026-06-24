@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     app_name: str = "ai-content-studio"
     log_level: str = "info"
     secret_key: str = Field(min_length=16, default="dev-secret-change-me-please-32b")
-    cors_origins: List[str] = ["*"]
+    cors_origins: list[str] = ["*"]
 
     # DB
     database_url: str = "postgresql+asyncpg://studio:studio@postgres:5432/studio"

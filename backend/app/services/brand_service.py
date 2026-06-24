@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import CurrentUser
-from app.models.account import Account
+from app.models.account import Account, Workspace
 from app.models.brand import Brand
 from app.schemas.brand import BrandCreate, BrandUpdate
 from app.services.provisioning import default_workspace, get_or_create_account
@@ -34,7 +34,20 @@ async def get(db: AsyncSession, user: CurrentUser, brand_id: UUID) -> Brand | No
 
 async def create(db: AsyncSession, user: CurrentUser, payload: BrandCreate) -> Brand:
     account = await _resolve_account(db, user)
-    ws_id = payload.workspace_id or (await default_workspace(db, account)).id
+    if payload.workspace_id:
+        # A supplied workspace_id must belong to the caller's account — otherwise
+        # a brand could be planted inside another tenant's workspace.
+        ws = (await db.execute(
+            select(Workspace).where(
+                Workspace.id == payload.workspace_id,
+                Workspace.account_id == account.id,
+            )
+        )).scalar_one_or_none()
+        if not ws:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "workspace not found")
+        ws_id = ws.id
+    else:
+        ws_id = (await default_workspace(db, account)).id
     brand = Brand(
         account_id=account.id,
         workspace_id=ws_id,

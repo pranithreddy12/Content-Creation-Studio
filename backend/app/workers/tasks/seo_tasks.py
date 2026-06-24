@@ -5,7 +5,6 @@ import asyncio
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
 from app.agents.runner import run_agent

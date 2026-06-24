@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
 from app.agents.retrieval import retrieve_brand_context, retrieve_viral_patterns
@@ -17,7 +15,6 @@ from app.db.session import SessionLocal
 from app.models.brand import Brand
 from app.models.content import ContentAsset, ContentIdea
 from app.workers.celery_app import celery_app
-
 
 SOCIAL_FORMATS = [
     "linkedin", "x_thread", "instagram", "carousel",

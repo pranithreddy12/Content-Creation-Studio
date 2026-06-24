@@ -1,7 +1,6 @@
 """Audio transcription via OpenAI Whisper."""
 from __future__ import annotations
 
-import io
 import tempfile
 
 from openai import OpenAI

@@ -5,10 +5,12 @@ Always returns: dict(text, json | None, tokens_in, tokens_out, cost_usd, model, 
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+from uuid import UUID
 
 import httpx
 from anthropic import Anthropic
@@ -17,6 +19,27 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.core.config import settings
 from app.core.logging import log
+from app.services.billing import budget
+
+# Billing context — set at request/Celery-task entry so the LLM chokepoint can
+# charge the right tenant. complete() FAILS CLOSED when this is unset: we never
+# make an unmetered provider call.
+_billing_account: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
+    "llm_billing_account", default=None
+)
+_billing_brand: contextvars.ContextVar[Optional[UUID]] = contextvars.ContextVar(
+    "llm_billing_brand", default=None
+)
+
+
+def set_billing_context(account_id: UUID | None, brand_id: UUID | None = None) -> None:
+    _billing_account.set(account_id)
+    _billing_brand.set(brand_id)
+
+
+def _estimate_input_tokens(text: str) -> int:
+    # ~4 chars/token is the standard rough heuristic; good enough for a reservation.
+    return max(1, len(text) // 4)
 
 
 # --- pricing table (USD per 1M tokens, input / output) ---
@@ -65,12 +88,52 @@ class LLMRouter:
         self._openai = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
         self._gemini_key = settings.gemini_api_key
 
+    async def complete(
+        self,
+        *,
+        system: str,
+        user: str,
+        json_schema: Optional[dict] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.7,
+        account_id: Optional[UUID] = None,
+    ) -> LLMResponse:
+        """Account-aware chokepoint. Reserves budget BEFORE the (retrying) call and
+        reconciles after; fails closed if no billing account is in context."""
+        acct = account_id or _billing_account.get()
+        if acct is None:
+            # Never make an unmetered provider call.
+            raise budget.BudgetUnset("no billing account in context for LLM call")
+
+        chain = [(provider, model)] if provider and model else self.DEFAULT_CHAIN
+        est_model = chain[0][1]
+        # Conservative estimate: counted input tokens + the full max_tokens priced as output.
+        estimate_usd = _price(est_model, _estimate_input_tokens(system + user), max_tokens)
+
+        # Reserve OUTSIDE the retry loop so retries don't double-charge.
+        reserved = await budget.reserve(acct, estimate_usd)
+        try:
+            resp = await self._complete_chain(
+                system=system, user=user, json_schema=json_schema,
+                provider=provider, model=model, max_tokens=max_tokens, temperature=temperature,
+            )
+        except Exception:
+            # Call never produced billable usage — release the whole reservation.
+            await budget.reconcile(acct, reserved, 0.0)
+            raise
+        # Reconcile estimate→actual and write the durable usage event.
+        await budget.reconcile(acct, reserved, resp.cost_usd)
+        await budget.record_actual(acct, _billing_brand.get(), resp.cost_usd)
+        return resp
+
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(min=1, max=8),
         retry=retry_if_exception_type(Exception),
     )
-    async def complete(
+    async def _complete_chain(
         self,
         *,
         system: str,

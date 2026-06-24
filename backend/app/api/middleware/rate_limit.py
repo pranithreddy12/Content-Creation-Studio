@@ -7,7 +7,10 @@ from starlette.responses import JSONResponse
 from app.db.redis import redis
 
 WINDOW_SEC = 60
-LIMIT_PER_MIN = 600  # global per-IP fallback; plan-level limits enforced separately
+# Coarse global per-IP ceiling, fails OPEN if Redis is down (acceptable for cheap
+# endpoints). Per-account, fail-CLOSED spend gates for LLM paths live in
+# app.services.billing.budget.check_rate and are applied in the agent endpoints.
+LIMIT_PER_MIN = 600
 EXEMPT_PREFIXES = ("/health", "/metrics", "/docs", "/openapi", "/")
 
 

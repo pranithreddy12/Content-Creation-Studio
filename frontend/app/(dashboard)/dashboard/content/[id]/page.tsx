@@ -26,7 +26,7 @@ export default function AssetDetail() {
           <pre className="whitespace-pre-wrap text-sm leading-6">{asset.body}</pre>
         </CardContent>
       </Card>
-      {asset.body_json && (
+      {asset.body_json != null && (
         <Card>
           <CardHeader><CardTitle className="text-base">Structured payload</CardTitle></CardHeader>
           <CardContent><pre className="text-xs">{JSON.stringify(asset.body_json, null, 2)}</pre></CardContent>

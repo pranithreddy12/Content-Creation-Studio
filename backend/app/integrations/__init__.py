@@ -15,7 +15,6 @@ from importlib import import_module
 from types import ModuleType
 from typing import Optional
 
-
 PLATFORM_TO_MODULE = {
     "wordpress": "app.integrations.wordpress.publisher",
     "linkedin":  "app.integrations.linkedin.publisher",

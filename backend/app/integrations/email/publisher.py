@@ -14,7 +14,6 @@ from app.core.security import decrypt
 from app.models.content import ContentAsset
 from app.models.publishing import PublishChannel, Schedule
 
-
 BREVO_API = "https://api.brevo.com/v3"
 
 

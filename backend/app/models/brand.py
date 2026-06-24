@@ -2,7 +2,8 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin

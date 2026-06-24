@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Iterable
+from collections.abc import Iterable
 
 import voyageai
 from openai import OpenAI
@@ -10,7 +10,8 @@ from qdrant_client.http.models import PointStruct
 
 from app.core.config import settings
 from app.services.ingestion.chunker import Chunk
-from app.utils.qdrant import VECTOR_SIZE, client as qdrant_client, ensure_collection
+from app.utils.qdrant import VECTOR_SIZE, ensure_collection
+from app.utils.qdrant import client as qdrant_client
 
 
 def _voyage(texts: list[str]) -> list[list[float]]:
@@ -47,7 +48,7 @@ def upsert_to_qdrant(
     ensure_collection(collection, size=VECTOR_SIZE)
     points: list[PointStruct] = []
     qdrant_ids: list[str] = []
-    for chunk, vec in zip(chunks, vectors):
+    for chunk, vec in zip(chunks, vectors, strict=False):
         qid = str(uuid.uuid4())
         qdrant_ids.append(qid)
         payload = {**payload_base, "ord": chunk.ord, "text": chunk.text, "tokens": chunk.tokens}

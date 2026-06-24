@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import uuid
 
-import httpx
 from elevenlabs.client import ElevenLabs
 from openai import OpenAI
 
 from app.core.config import settings
 from app.core.logging import log
 from app.utils.storage import s3
-
 
 DEFAULT_VOICE_EL = "21m00Tcm4TlvDq8ikWAM"  # "Rachel"
 DEFAULT_VOICE_OAI = "alloy"

@@ -5,11 +5,12 @@ import { theme } from "@/lib/theme";
 interface Row { platform: string; views: number; likes: number; shares: number; ctr: number }
 
 export default function Analytics() {
-  const { data = [] } = useApiQuery<Row[]>(["timeseries"], "/analytics/timeseries?window=30d");
+  const { data } = useApiQuery<Row[]>(["timeseries"], "/analytics/timeseries?window=30d");
+  const rows: Row[] = data ?? [];
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bg }} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.h1}>30-day performance</Text>
-      {data.map((r, i) => (
+      {rows.map((r: Row, i: number) => (
         <View key={i} style={styles.row}>
           <Text style={styles.platform}>{r.platform}</Text>
           <View style={{ flexDirection: "row", gap: 12 }}>

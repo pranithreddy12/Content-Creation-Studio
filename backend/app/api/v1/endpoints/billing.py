@@ -3,7 +3,6 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DBSession, current_user
 from app.models.account import Account

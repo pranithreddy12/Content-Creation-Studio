@@ -1,8 +1,6 @@
 """Research agent — given raw research_items, synthesizes structured opportunities."""
 from __future__ import annotations
 
-import json
-
 from app.agents.base import Agent, AgentContext, AgentResult
 from app.agents.llm_router import llm_router
 from app.agents.prompt_registry import prompts

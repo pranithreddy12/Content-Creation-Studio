@@ -1,19 +1,19 @@
 """Publishing endpoints — OAuth init/callback + channel CRUD + webhooks."""
+import json
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DBSession, current_user
-from app.integrations.oauth import build_auth_url, exchange_code, PLATFORM_OAUTH
+from app.core.security import encrypt
+from app.integrations.oauth import PLATFORM_OAUTH, build_auth_url, exchange_code
 from app.models.account import Account
 from app.models.brand import Brand
 from app.models.publishing import PublishChannel
-from app.core.security import encrypt
 from app.services.provisioning import get_or_create_account
-import json
 
 router = APIRouter()
 
@@ -97,8 +97,12 @@ async def oauth_callback(
     except RuntimeError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     acct = await get_or_create_account(db, user)
+    try:
+        brand_uuid = UUID(result["brand_id"])
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid brand id in oauth state")
     brand = (await db.execute(
-        select(Brand).where(Brand.id == UUID(result["brand_id"]), Brand.account_id == acct.id)
+        select(Brand).where(Brand.id == brand_uuid, Brand.account_id == acct.id)
     )).scalar_one_or_none()
     if not brand:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "brand not found")
@@ -116,6 +120,15 @@ async def oauth_callback(
     return {"id": str(ch.id), "platform": platform, "status": "connected"}
 
 
+async def _owned_brand(db, acct: Account, brand_id: UUID) -> Brand:
+    brand = (await db.execute(
+        select(Brand).where(Brand.id == brand_id, Brand.account_id == acct.id)
+    )).scalar_one_or_none()
+    if not brand:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "brand not found")
+    return brand
+
+
 @router.post("/wordpress")
 async def create_wordpress_channel(
     payload: WordPressCreate,
@@ -123,6 +136,7 @@ async def create_wordpress_channel(
     user: Annotated[CurrentUser, Depends(current_user)],
 ):
     acct = await get_or_create_account(db, user)
+    await _owned_brand(db, acct, payload.brand_id)
     blob = encrypt(json.dumps({
         "site": payload.site,
         "username": payload.username,
@@ -149,6 +163,7 @@ async def create_email_channel(
     user: Annotated[CurrentUser, Depends(current_user)],
 ):
     acct = await get_or_create_account(db, user)
+    await _owned_brand(db, acct, payload.brand_id)
     blob = encrypt(json.dumps({
         "api_key": payload.api_key,
         "sender": {"name": payload.sender_name, "email": payload.sender_email},
@@ -172,10 +187,15 @@ async def create_email_channel(
 async def list_channels(
     brand_id: UUID,
     db: DBSession,
-    _: Annotated[CurrentUser, Depends(current_user)],
+    user: Annotated[CurrentUser, Depends(current_user)],
 ):
+    # Tenant isolation: scope by account_id so users only see their own channels.
+    acct = await get_or_create_account(db, user)
     rows = (await db.execute(
-        select(PublishChannel).where(PublishChannel.brand_id == brand_id)
+        select(PublishChannel).where(
+            PublishChannel.brand_id == brand_id,
+            PublishChannel.account_id == acct.id,
+        )
     )).scalars().all()
     return [{"id": str(r.id), "platform": r.platform, "display_name": r.display_name,
              "status": r.status, "meta": r.meta} for r in rows]
@@ -185,8 +205,17 @@ async def list_channels(
 async def disconnect_channel(
     channel_id: UUID,
     db: DBSession,
-    _: Annotated[CurrentUser, Depends(current_user)],
+    user: Annotated[CurrentUser, Depends(current_user)],
 ):
-    ch = (await db.execute(select(PublishChannel).where(PublishChannel.id == channel_id))).scalar_one()
+    # Tenant + existence scoping in one query — previously .scalar_one() crashed with 500 on unknown id.
+    acct = await get_or_create_account(db, user)
+    ch = (await db.execute(
+        select(PublishChannel).where(
+            PublishChannel.id == channel_id,
+            PublishChannel.account_id == acct.id,
+        )
+    )).scalar_one_or_none()
+    if not ch:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "channel not found")
     ch.status = "disconnected"
     await db.commit()

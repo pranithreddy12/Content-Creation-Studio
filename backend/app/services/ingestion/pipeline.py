@@ -53,7 +53,7 @@ async def ingest_source(db: AsyncSession, source_id: UUID) -> dict:
                 "title": src.title,
             },
         )
-        for chunk, qid in zip(chunks, qdrant_ids):
+        for chunk, qid in zip(chunks, qdrant_ids, strict=False):
             db.add(
                 SourceChunk(
                     source_id=src.id,

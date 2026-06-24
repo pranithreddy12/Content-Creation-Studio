@@ -7,13 +7,12 @@ Normalized item shape:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Iterable
 
 import feedparser
 import httpx
 import praw
-import trafilatura
 
 from app.core.config import settings
 from app.core.logging import log
@@ -232,7 +231,7 @@ def fetch_competitor_rss(rss_url: str, *, count: int = 15) -> list[dict]:
             "external_id": e.get("id") or e.get("link"),
             "title": e.get("title"),
             "url": e.get("link"),
-            "excerpt": _strip_html((e.get("summary") or ""))[:800],
+            "excerpt": _strip_html(e.get("summary") or "")[:800],
             "posted_at": e.get("published"),
             "engagement": {},
             "meta": {"source": rss_url},

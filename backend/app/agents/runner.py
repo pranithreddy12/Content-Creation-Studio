@@ -3,18 +3,19 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Optional
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import Agent, AgentContext, AgentResult
+from app.agents.llm_router import set_billing_context
 from app.core.logging import log
 from app.models.agent import AgentRun
 
 
 async def run_agent(db: AsyncSession, agent: Agent, ctx: AgentContext) -> AgentResult:
     started = time.perf_counter()
+    # Bind billing context so the LLM chokepoint charges this tenant (fail-closed otherwise).
+    set_billing_context(ctx.account_id, ctx.brand_id)
     row = AgentRun(
         account_id=ctx.account_id,
         brand_id=ctx.brand_id,

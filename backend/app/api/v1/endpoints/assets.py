@@ -70,7 +70,9 @@ async def list_assets(
         q = q.where(ContentAsset.status == status)
     if format:
         q = q.where(ContentAsset.format == format)
-    q = q.order_by(ContentAsset.created_at.desc()).limit(min(limit, 200))
+    # Tiebreaker on `id` so paginated lists are deterministic when many rows share created_at
+    # (happens when a single batch dispatch inserts many assets inside one transaction).
+    q = q.order_by(ContentAsset.created_at.desc(), ContentAsset.id.desc()).limit(min(limit, 200))
     rows = (await db.execute(q)).scalars().all()
     return [_serialize(a) for a in rows]
 

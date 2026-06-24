@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account
 from app.models.billing import PlanLimit, UsageEvent
 
-
 UsageKind = Literal["asset_generated", "video_minute", "publish_op", "llm_usd"]
 
 

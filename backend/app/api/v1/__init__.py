@@ -1,21 +1,21 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
-    auth,
-    brands,
-    sources,
-    ideas,
-    assets,
-    media,
-    schedules,
-    publishing,
-    workflows,
-    analytics,
-    calendar,
-    webhooks,
     agents,
+    analytics,
+    assets,
+    auth,
     billing,
+    brands,
+    calendar,
+    ideas,
+    media,
     notifications,
+    publishing,
+    schedules,
+    sources,
+    webhooks,
+    workflows,
 )
 
 router = APIRouter()

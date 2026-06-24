@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.workers.tasks.loop_tasks",
         "app.workers.tasks.ingest_tasks",
         "app.workers.tasks.workflow_tasks",
+        "app.workers.tasks.health_tasks",
     ],
 )
 
@@ -39,6 +40,7 @@ celery_app.conf.update(
         "app.workers.tasks.viral_tasks.*":      {"queue": "research"},
         "app.workers.tasks.ingest_tasks.*":     {"queue": "heavy"},
         "app.workers.tasks.loop_tasks.*":       {"queue": "default"},
+        "app.workers.tasks.workflow_tasks.*":   {"queue": "default"},
     },
     task_acks_late=True,
     task_reject_on_worker_lost=True,
@@ -60,6 +62,14 @@ celery_app.conf.update(
         "viral-crawl-hourly": {
             "task": "app.workers.tasks.viral_tasks.crawl_all_platforms",
             "schedule": crontab(minute=5),
+        },
+        "publish-due-schedules": {
+            "task": "app.workers.tasks.publishing_tasks.publish_due",
+            "schedule": crontab(minute="*/5"),
+        },
+        "reap-stuck-publishes": {
+            "task": "app.workers.tasks.publishing_tasks.reap_stuck_publishes",
+            "schedule": crontab(minute="*/15"),
         },
     },
 )

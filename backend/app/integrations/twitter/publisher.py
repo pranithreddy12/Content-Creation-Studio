@@ -9,7 +9,6 @@ from app.core.security import decrypt
 from app.models.content import ContentAsset
 from app.models.publishing import PublishChannel, Schedule
 
-
 API = "https://api.twitter.com/2"
 
 

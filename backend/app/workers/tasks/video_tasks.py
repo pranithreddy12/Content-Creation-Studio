@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
 from app.agents.retrieval import retrieve_viral_patterns
@@ -16,7 +15,6 @@ from app.db.session import SessionLocal
 from app.models.brand import Brand
 from app.models.content import ContentAsset, VideoRender
 from app.workers.celery_app import celery_app
-
 
 VIDEO_FORMATS = {"reel": 30, "short": 45, "tiktok": 45, "yt_script": 480}
 
@@ -56,11 +54,11 @@ async def _render(idea_id: UUID, asset_id: UUID) -> str | None:
         await db.commit()
         # Actual TTS + b-roll + ffmpeg render dispatched to the dedicated `video` queue
         # (see app/integrations/video_render.py in M7).
+        import contextlib
+
         from app.integrations.video_render import enqueue_render
-        try:
+        with contextlib.suppress(Exception):
             enqueue_render(str(vr.id))
-        except Exception:
-            pass
         return str(vr.id)
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-
 CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://*.clerk.com https://*.clerk.dev; "

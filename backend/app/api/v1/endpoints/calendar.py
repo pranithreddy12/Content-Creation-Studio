@@ -21,6 +21,7 @@ async def calendar(
     brand_id: UUID = Query(...),
     from_: datetime = Query(..., alias="from"),
     to: datetime = Query(...),
+    limit: int = Query(500),
 ) -> list[dict]:
     acct = await get_or_create_account(db, user)
     brand = (await db.execute(
@@ -28,13 +29,15 @@ async def calendar(
     )).scalar_one_or_none()
     if not brand:
         return []
+    # Tiebreaker on `id` so the order is stable when many rows share scheduled_at.
     rows = (await db.execute(
         select(Schedule, ContentAsset.format, ContentAsset.title)
         .join(ContentAsset, ContentAsset.id == Schedule.asset_id)
         .where(Schedule.brand_id == brand_id,
                Schedule.scheduled_at >= from_,
                Schedule.scheduled_at <= to)
-        .order_by(Schedule.scheduled_at.asc())
+        .order_by(Schedule.scheduled_at.asc(), Schedule.id.asc())
+        .limit(min(max(limit, 1), 1000))
     )).all()
     return [{
         "id": str(s.id), "brand_id": str(s.brand_id), "asset_id": str(s.asset_id),

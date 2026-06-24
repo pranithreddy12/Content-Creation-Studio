@@ -18,11 +18,11 @@ from urllib.parse import urlparse
 import httpx
 import trafilatura
 from pypdf import PdfReader
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
+from app.core.config import settings
 from app.services.ingestion.audio import transcribe_audio
 from app.utils.storage import s3
-from app.core.config import settings
 
 
 @dataclass

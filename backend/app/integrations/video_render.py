@@ -10,14 +10,12 @@ This runs on the `video` queue which uses Dockerfile.video (has ffmpeg installed
 from __future__ import annotations
 
 import asyncio
-import os
 import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
 import ffmpeg
-import httpx
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -79,7 +77,7 @@ async def _render(video_render_id: str) -> dict:
 
             # 3. Build per-beat clips with on-screen captions.
             clip_paths: list[Path] = []
-            for i, (b, img) in enumerate(zip(beats, image_locals)):
+            for i, (b, img) in enumerate(zip(beats, image_locals, strict=False)):
                 dur = max(1.0, float(b.get("ts_end", i + 2)) - float(b.get("ts_start", i)))
                 cap = (b.get("on_screen_text") or b.get("narration") or "").replace("'", "")[:140]
                 out = tmp_path / f"clip-{i}.mp4"
@@ -126,11 +124,13 @@ async def _render(video_render_id: str) -> dict:
                                 ContentType="video/mp4")
 
         async with SessionLocal() as db:
+            from app.models.content import ContentAsset
             vr = (await db.execute(select(VideoRender).where(VideoRender.id == video_render_id))).scalar_one()
+            asset = (await db.execute(select(ContentAsset).where(ContentAsset.id == vr.asset_id))).scalar_one()
             vr.status = "done"
             vr.storage_key = key
             db.add(MediaAsset(
-                account_id=__brand_account(vr),
+                account_id=asset.account_id,
                 brand_id=vr.brand_id,
                 asset_id=vr.asset_id,
                 kind="video",
@@ -152,14 +152,3 @@ async def _render(video_render_id: str) -> dict:
         raise
 
 
-def __brand_account(vr):
-    # late-load to avoid extra query when account_id is on the same row of asset
-    from sqlalchemy import select as _s
-    import asyncio as _a
-    from app.models.content import ContentAsset
-    from app.db.session import SessionLocal as _S
-    async def _q():
-        async with _S() as db:
-            a = (await db.execute(_s(ContentAsset).where(ContentAsset.id == vr.asset_id))).scalar_one()
-            return a.account_id
-    return _a.run(_q())

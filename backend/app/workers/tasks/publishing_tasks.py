@@ -7,18 +7,40 @@ brand-agnostic dispatcher.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import log
 from app.db.session import SessionLocal
 from app.models.brand import Brand
 from app.models.content import ContentAsset, ContentIdea
-from app.models.publishing import PublishChannel, Schedule
+from app.models.publishing import PublishChannel, Schedule, ScheduleStatus
 from app.workers.celery_app import celery_app
+
+# A publish that keeps failing transiently is retried up to this many attempts,
+# then parked in a terminal 'failed' state instead of looping forever.
+MAX_PUBLISH_ATTEMPTS = 5
+# A row left in 'publishing' longer than this is considered abandoned (worker
+# crashed mid-publish) and reaped to a terminal state for operator review —
+# NOT blindly re-posted, since we can't prove the provider call didn't land.
+STUCK_PUBLISHING_TIMEOUT = timedelta(minutes=15)
+
+
+def _idempotency_key(schedule: Schedule) -> str:
+    """Deterministic key for a (asset, channel) publish so a provider that
+    supports idempotency keys dedupes a duplicate request server-side."""
+    return f"pub:{schedule.asset_id}:{schedule.channel_id}"
+
+
+async def _call_adapter(adapter, channel: PublishChannel, asset: ContentAsset, idem_key: str) -> dict:
+    """Call adapter.publish, forwarding the idempotency key only if it accepts one."""
+    if "idempotency_key" in inspect.signature(adapter.publish).parameters:
+        return await adapter.publish(channel, asset, idempotency_key=idem_key)
+    return await adapter.publish(channel, asset)
 
 
 # Default mapping content_asset.format → publish_channel.platform
@@ -70,7 +92,7 @@ async def _dispatch(idea_id: UUID) -> int:
                 asset_id=a.id,
                 channel_id=channel.id,
                 scheduled_at=scheduled_at,
-                status="pending",
+                status=ScheduleStatus.PENDING,
                 created_at=now,
             ))
             a.status = "scheduled"
@@ -86,46 +108,107 @@ def dispatch_for_idea(idea_id: str) -> int:
     return asyncio.run(_dispatch(UUID(idea_id)))
 
 
+async def _claim(db: AsyncSession, schedule_id: UUID) -> bool:
+    """Atomically flip pending→publishing for exactly one worker.
+
+    The conditional UPDATE (status must still be 'pending') is the concurrency
+    arbiter: if two workers race the same row, only the one whose UPDATE matches
+    a row gets rowcount==1 and proceeds; the other skips. Prevents double-publish.
+    """
+    res = await db.execute(
+        update(Schedule)
+        .where(Schedule.id == schedule_id, Schedule.status == ScheduleStatus.PENDING)
+        .values(status=ScheduleStatus.PUBLISHING, attempt=Schedule.attempt + 1,
+                claimed_at=datetime.now(timezone.utc))
+    )
+    await db.commit()
+    return res.rowcount == 1
+
+
 async def _publish_due() -> int:
-    """Pick up Schedules whose scheduled_at has passed and dispatch to adapter."""
+    """Pick up Schedules whose scheduled_at has passed and dispatch to adapter.
+
+    Safe under concurrent runners and re-delivery: each row is claimed atomically
+    (so it's published by exactly one worker), already-published rows are never
+    re-selected, and transient failures retry up to MAX_PUBLISH_ATTEMPTS before
+    going terminal.
+    """
     from app.integrations import publish_registry  # late import to avoid cycle
     async with SessionLocal() as db:
         now = datetime.now(timezone.utc)
         due = (await db.execute(
-            select(Schedule).where(and_(Schedule.status == "pending",
+            select(Schedule).where(and_(Schedule.status == ScheduleStatus.PENDING,
                                          Schedule.scheduled_at <= now))
             .limit(100)
         )).scalars().all()
         n = 0
         for s in due:
+            if not await _claim(db, s.id):
+                continue  # another worker claimed it first
+            await db.refresh(s)
             channel = (await db.execute(
                 select(PublishChannel).where(PublishChannel.id == s.channel_id)
             )).scalar_one()
             asset = (await db.execute(
                 select(ContentAsset).where(ContentAsset.id == s.asset_id)
             )).scalar_one()
-            s.status = "publishing"
-            s.attempt += 1
-            await db.commit()
             try:
                 adapter = publish_registry.get(channel.platform)
                 if not adapter:
                     raise RuntimeError(f"no adapter for {channel.platform}")
-                ext = await adapter.publish(channel, asset)
-                s.status = "published"
+                ext = await _call_adapter(adapter, channel, asset, _idempotency_key(s))
+                s.status = ScheduleStatus.PUBLISHED
                 s.external_id = ext.get("id")
                 s.external_url = ext.get("url")
                 s.published_at = datetime.now(timezone.utc)
                 asset.status = "published"
                 n += 1
             except Exception as exc:
-                s.status = "failed"
+                # Bounded retry: transient failures go back to 'pending' (re-tried
+                # next cycle) until we exhaust attempts, then park terminally.
+                if s.attempt >= MAX_PUBLISH_ATTEMPTS:
+                    s.status = ScheduleStatus.FAILED
+                else:
+                    s.status = ScheduleStatus.PENDING
                 s.error = str(exc)[:1000]
-                log.exception("publish_failed", schedule=str(s.id))
+                log.warning("publish_failed", schedule=str(s.id), attempt=s.attempt, status=s.status)
             await db.commit()
         return n
 
 
-@celery_app.task(name="app.workers.tasks.publishing_tasks.publish_due")
+async def _reap_stuck_publishing() -> int:
+    """Park rows abandoned in 'publishing' (worker crashed mid-call).
+
+    We do NOT re-post: a crash after the provider accepted the post would
+    double-publish to a customer's real account. Such rows get a DISTINCT
+    terminal status 'needs_review' — not 'failed' — because the post may
+    already be live; an operator must verify before any re-publish. Abandonment
+    is measured from claimed_at (when it entered 'publishing'), not scheduled_at,
+    so a row on a legitimate retry isn't reaped for having an old schedule time.
+    """
+    async with SessionLocal() as db:
+        cutoff = datetime.now(timezone.utc) - STUCK_PUBLISHING_TIMEOUT
+        res = await db.execute(
+            update(Schedule)
+            .where(Schedule.status == ScheduleStatus.PUBLISHING,
+                   or_(Schedule.claimed_at <= cutoff, Schedule.claimed_at.is_(None)))
+            .values(status=ScheduleStatus.NEEDS_REVIEW,
+                    error="abandoned in 'publishing' (worker crash?) — post may be live, verify before re-publish")
+        )
+        await db.commit()
+        if res.rowcount:
+            log.warning("publish_reaped_stuck", count=res.rowcount)
+        return res.rowcount
+
+
+@celery_app.task(name="app.workers.tasks.publishing_tasks.publish_due", acks_late=True)
 def publish_due() -> int:
+    # acks_late is safe here: the atomic claim + pending-only select make a
+    # redelivered batch idempotent (published rows are skipped, in-flight rows
+    # are claimed by whichever worker wins).
     return asyncio.run(_publish_due())
+
+
+@celery_app.task(name="app.workers.tasks.publishing_tasks.reap_stuck_publishes")
+def reap_stuck_publishes() -> int:
+    return asyncio.run(_reap_stuck_publishing())

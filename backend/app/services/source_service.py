@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -7,13 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.auth import CurrentUser
+from app.core.config import settings
 from app.models.account import Account
 from app.models.brand import Brand
 from app.models.source import Source
 from app.schemas.source import SourceCreate, SourceUploadInit
+from app.services.ingestion.url_guard import validate_external_url
 from app.services.provisioning import get_or_create_account
 from app.utils.storage import s3
-from app.core.config import settings
+
+_URL_KINDS = {"url", "blog", "product", "youtube", "competitor"}
 
 
 async def _account(db: AsyncSession, user: CurrentUser) -> Account:
@@ -33,6 +34,8 @@ async def _own_brand(db: AsyncSession, acct: Account, brand_id: UUID) -> Brand:
 async def create_source(db: AsyncSession, user: CurrentUser, payload: SourceCreate) -> Source:
     acct = await _account(db, user)
     await _own_brand(db, acct, payload.brand_id)
+    if payload.kind in _URL_KINDS:
+        validate_external_url(payload.url)
     src = Source(
         account_id=acct.id,
         brand_id=payload.brand_id,
@@ -64,10 +67,12 @@ def make_upload_intent(payload: SourceUploadInit) -> dict:
     return {"storage_key": key, "upload_url": url, "expires_in": 3600}
 
 
-async def list_for_brand(db: AsyncSession, user: CurrentUser, brand_id: UUID) -> list[Source]:
+async def list_for_brand(db: AsyncSession, user: CurrentUser, brand_id: UUID, limit: int = 200) -> list[Source]:
     acct = await _account(db, user)
     await _own_brand(db, acct, brand_id)
     res = await db.execute(
-        select(Source).where(Source.brand_id == brand_id).order_by(Source.created_at.desc())
+        select(Source).where(Source.brand_id == brand_id)
+        .order_by(Source.created_at.desc(), Source.id.desc())
+        .limit(min(max(limit, 1), 500))
     )
     return list(res.scalars().all())

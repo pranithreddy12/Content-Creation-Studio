@@ -37,5 +37,6 @@ async def list_sources(
     brand_id: UUID,
     db: DBSession,
     user: Annotated[CurrentUser, Depends(current_user)],
+    limit: int = 200,
 ):
-    return await source_service.list_for_brand(db, user, brand_id)
+    return await source_service.list_for_brand(db, user, brand_id, limit=limit)

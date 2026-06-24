@@ -10,8 +10,18 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "C4", "SIM"]
-ignore = ["E501"]
+# Suppress rules that fight deliberate codebase conventions / framework idioms,
+# so CI surfaces real violations (dead imports, bugs) instead of style noise:
+#   E501   line length — not enforced
+#   UP017  `timezone.utc` → `datetime.UTC` (codebase uses timezone.utc throughout)
+#   UP045  `Optional[X]` → `X | None` (codebase uses Optional[...] throughout, 200+ sites)
+#   E701   `if x: return` one-liners — used deliberately for terse guards
+#   B008   function call in arg default — this IS the FastAPI Depends() idiom
+#   B904   `raise ... from` — stylistic; not a correctness bug
+ignore = ["E501", "UP017", "UP045", "E701", "B008", "B904"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]

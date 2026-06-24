@@ -1,7 +1,7 @@
 """RAG helpers — retrieve brand sources + viral patterns from Qdrant."""
 from __future__ import annotations
 
-from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
 from app.services.ingestion.embedder import embed_chunks
 from app.utils.qdrant import aclient, brand_sources

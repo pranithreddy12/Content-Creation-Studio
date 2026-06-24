@@ -8,13 +8,12 @@ DAILY_LOOP_LOCK Redis key per (brand_id, YYYY-MM-DD).
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from celery import chain, chord, group
+from celery import chain, group
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import log
 from app.db.redis import redis
@@ -27,7 +26,6 @@ from app.workers.tasks.research_tasks import research_brand
 from app.workers.tasks.seo_tasks import optimize_asset
 from app.workers.tasks.video_tasks import render_video_for_idea
 from app.workers.tasks.writing_tasks import generate_blog, generate_social_bundle
-
 
 # Aliased dotted-name references for chaining without a Python import cycle.
 PUBLISH_TASK = "app.workers.tasks.publishing_tasks.dispatch_for_idea"
@@ -56,10 +54,10 @@ def _due_now(brand: Brand) -> bool:
     return 0 <= delta < 15 * 60
 
 
-@celery_app.task(name="app.workers.tasks.loop_tasks.kickoff_daily_loops")
-def kickoff_daily_loops() -> dict:
-    """Beat job — fan out daily runs for every eligible brand."""
-    brands = asyncio.run(_eligible_brands())
+async def _do_kickoff() -> dict:
+    """Async core of the kickoff task — callable from both Celery (via asyncio.run)
+    and from tests directly (since they run inside an event loop)."""
+    brands = await _eligible_brands()
     fired: list[str] = []
     for b in brands:
         if not _due_now(b):
@@ -67,12 +65,18 @@ def kickoff_daily_loops() -> dict:
         today = datetime.now(timezone.utc).date().isoformat()
         key = f"loop:lock:{b.id}:{today}"
         # Set lock with 23h TTL atomically (NX)
-        won = asyncio.run(redis.set(key, "1", ex=23 * 3600, nx=True))
+        won = await redis.set(key, "1", ex=23 * 3600, nx=True)
         if not won:
             continue
         run_brand_loop.delay(str(b.id))
         fired.append(str(b.id))
     return {"fired": fired}
+
+
+@celery_app.task(name="app.workers.tasks.loop_tasks.kickoff_daily_loops")
+def kickoff_daily_loops() -> dict:
+    """Beat job — fan out daily runs for every eligible brand."""
+    return asyncio.run(_do_kickoff())
 
 
 @celery_app.task(name="app.workers.tasks.loop_tasks.run_brand_loop")

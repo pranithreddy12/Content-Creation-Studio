@@ -3,17 +3,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Iterable
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from app.core.logging import log
 from app.db.session import SessionLocal
 from app.models.analytics import AssetMetric
-from app.models.brand import Brand
-from app.models.publishing import Schedule
+from app.models.publishing import Schedule, ScheduleStatus
 from app.workers.celery_app import celery_app
 
 
@@ -25,7 +22,8 @@ async def _collect_for_asset(asset_id: UUID) -> None:
     """
     async with SessionLocal() as db:
         scheds = (await db.execute(
-            select(Schedule).where(Schedule.asset_id == asset_id, Schedule.status == "published")
+            select(Schedule).where(Schedule.asset_id == asset_id,
+                                   Schedule.status == ScheduleStatus.PUBLISHED)
         )).scalars().all()
         for s in scheds:
             try:

@@ -1,13 +1,9 @@
 """External webhooks + push token registration."""
-from datetime import datetime, timezone
-from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DBSession, current_user
-from app.models.notification import PushToken
+from app.api.deps import DBSession
 from app.services.billing import handle_webhook_event
 
 router = APIRouter()

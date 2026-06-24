@@ -8,7 +8,6 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.core.logging import log
 from app.db.session import SessionLocal
 from app.integrations.image_gen import generate_image
 from app.models.content import MediaAsset

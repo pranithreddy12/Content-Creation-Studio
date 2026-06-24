@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import base64
-import io
 import uuid
 
 import httpx

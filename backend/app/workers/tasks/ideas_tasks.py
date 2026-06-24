@@ -7,22 +7,22 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import AgentContext
-from app.agents.llm_router import llm_router
+from app.agents.llm_router import llm_router, set_billing_context
 from app.agents.prompt_registry import prompts
 from app.core.logging import log
 from app.db.session import SessionLocal
 from app.models.brand import Brand
 from app.models.content import ContentIdea
-from app.models.research import Opportunity, ResearchRun
+from app.models.research import Opportunity
+from app.services.billing import BudgetExceeded
 from app.workers.celery_app import celery_app
 
 
 async def _generate(brand_id: UUID, research_id: UUID, n: int = 100) -> list[UUID]:
     async with SessionLocal() as db:
         brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one()
+        set_billing_context(brand.account_id, brand.id)
         opps = (await db.execute(
             select(Opportunity).where(Opportunity.research_id == research_id).limit(120)
         )).scalars().all()
@@ -70,6 +70,7 @@ async def _score(idea_id: UUID) -> None:
     async with SessionLocal() as db:
         idea = (await db.execute(select(ContentIdea).where(ContentIdea.id == idea_id))).scalar_one()
         brand = (await db.execute(select(Brand).where(Brand.id == idea.brand_id))).scalar_one()
+        set_billing_context(brand.account_id, brand.id)
         p = prompts.get("ideas.score")
         resp = await llm_router.complete(
             system="Score ideas crisply. Strict JSON.",
@@ -115,14 +116,22 @@ async def _select_top(brand_id: UUID, research_id: UUID, k: int) -> list[UUID]:
 @celery_app.task(name="app.workers.tasks.ideas_tasks.generate_ideas",
                  autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def generate_ideas(brand_id: str, research_id: str, n: int = 100) -> list[str]:
-    ids = asyncio.run(_generate(UUID(brand_id), UUID(research_id), n))
+    try:
+        ids = asyncio.run(_generate(UUID(brand_id), UUID(research_id), n))
+    except BudgetExceeded as exc:
+        # Terminal: budget is exhausted; retrying would just burn the queue.
+        log.warning("generate_ideas_budget_exceeded", brand=brand_id, err=str(exc))
+        return []
     return [str(i) for i in ids]
 
 
 @celery_app.task(name="app.workers.tasks.ideas_tasks.score_idea",
                  autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def score_idea(idea_id: str) -> None:
-    asyncio.run(_score(UUID(idea_id)))
+    try:
+        asyncio.run(_score(UUID(idea_id)))
+    except BudgetExceeded as exc:
+        log.warning("score_idea_budget_exceeded", idea=idea_id, err=str(exc))
 
 
 @celery_app.task(name="app.workers.tasks.ideas_tasks.select_top_ideas")

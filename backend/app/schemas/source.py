@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-
 SourceKind = Literal["topic", "url", "blog", "product", "youtube", "pdf", "voice", "competitor"]
 
 

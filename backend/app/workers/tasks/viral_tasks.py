@@ -5,22 +5,21 @@ import asyncio
 import hashlib
 import uuid as uuidlib
 from datetime import datetime, timezone
-from uuid import UUID
 
 from qdrant_client.http.models import PointStruct
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.llm_router import llm_router
+from app.agents.llm_router import llm_router, set_billing_context
 from app.agents.prompt_registry import prompts
 from app.core.logging import log
 from app.db.session import SessionLocal
 from app.models.viral import ViralPattern, ViralPost
-from app.services.research.fetchers import fetch_reddit, fetch_x
+from app.services.billing.budget import SYSTEM_ACCOUNT_ID
 from app.services.ingestion.embedder import embed_chunks
-from app.utils.qdrant import client as qdrant_client, ensure_collection
+from app.services.research.fetchers import fetch_reddit, fetch_x
+from app.utils.qdrant import client as qdrant_client
+from app.utils.qdrant import ensure_collection
 from app.workers.celery_app import celery_app
-
 
 VIRAL_THRESHOLDS = {
     "x":         {"likes": 5_000, "views": 100_000},
@@ -40,6 +39,8 @@ def _hash(text: str) -> str:
 
 async def _ingest_platform(channel: str, items: list[dict]) -> int:
     ensure_collection(VIRAL_COLLECTION, size=1024)
+    # Cross-tenant pattern mining is platform-internal, not billable to any tenant.
+    set_billing_context(SYSTEM_ACCOUNT_ID, None)
     saved = 0
     async with SessionLocal() as db:
         for it in items:

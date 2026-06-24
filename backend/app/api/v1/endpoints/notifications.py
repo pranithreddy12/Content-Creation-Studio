@@ -1,12 +1,10 @@
 """Notifications — push-token registration + in-app notification list."""
 from datetime import datetime, timezone
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, DBSession, current_user
 from app.models.notification import Notification, PushToken

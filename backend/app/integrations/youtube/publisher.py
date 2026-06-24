@@ -12,7 +12,6 @@ from app.models.content import ContentAsset, MediaAsset
 from app.models.publishing import PublishChannel, Schedule
 from app.utils.storage import s3
 
-
 API = "https://www.googleapis.com"
 
 
