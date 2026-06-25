@@ -44,4 +44,4 @@ praw==7.7.1
 limits==3.13.0
 fastapi-limiter==0.1.6
 tweepy==4.14.0
-gunicorn==23.0.0
+gunicorn==26.0.0
