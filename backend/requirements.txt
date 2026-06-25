@@ -40,7 +40,7 @@ ffmpeg-python==0.2.0
 elevenlabs==1.10.0
 replicate==1.0.3
 sib-api-v3-sdk==7.6.0
-praw==7.7.1
+praw==8.0.1
 limits==3.13.0
 fastapi-limiter==0.1.6
 tweepy==4.14.0
