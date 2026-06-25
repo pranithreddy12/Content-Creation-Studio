@@ -1,7 +1,7 @@
 # Install + build in one stage so pnpm's symlinked node_modules stays intact
 # (a cross-stage `COPY node_modules` breaks pnpm's .pnpm virtual store, which is
 # what previously left `next/dist/bin/next` unresolvable → MODULE_NOT_FOUND).
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat && npm i -g pnpm
 # Copy the pnpm lockfile (the project has no package-lock.json) so the install
@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -S nodejs && adduser -S next -G nodejs
