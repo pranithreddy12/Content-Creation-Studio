@@ -22,7 +22,7 @@
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
     "posthog-react-native": "^3.3.0",
-    "react": "18.2.0",
+    "react": "19.2.7",
     "react-native": "0.74.5",
     "react-native-gesture-handler": "~2.16.1",
     "react-native-mmkv": "^2.12.2",
